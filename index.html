@@ -744,6 +744,10 @@
                 renderMap(worldData);
                 addConsoleMessage(`Loaded ${countriesData.length} countries`, 'success');
             } catch (error) {
+                // Ensure state.countries is always an array
+                if (!Array.isArray(state.countries)) {
+                    state.countries = [];
+                }
                 addConsoleMessage(`Error loading map: ${error.message}`, 'warning');
                 showError('Failed to load map data. Using fallback visualization.');
                 renderFallbackMap();
@@ -869,6 +873,12 @@
         }
 
         function findCountryByGeoId(geoId) {
+            // Safety check: ensure state.countries is an array
+            if (!Array.isArray(state.countries)) {
+                state.countries = [];
+                return null;
+            }
+            
             // Try to match by various country codes
             // This is a simplified matching - in production, use a proper mapping table
             const country = state.countries.find(c => 
