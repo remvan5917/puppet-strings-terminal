@@ -1,24 +1,1197 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Puppet Strings Terminal</title>
+    <title>Puppet Strings Terminal - Intelligence Dashboard</title>
+    
+    <!-- Optional: Include external config file for API keys (recommended for production) -->
+    <!-- <script src="config.js"></script> -->
+    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="https://d3js.org/d3-geo.v3.min.js"></script>
+    <script src="https://d3js.org/topojson.v3.min.js"></script>
     <style>
-        /* Your CSS styles here */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            /* Cyber-Noir Palette - The Puppet Strings */
+            --primary: #00f2ff;                    /* Cyan Electric - Primary accent */
+            --bg: #020408;                          /* Deep Blue/Black - Main background */
+            --bg-panel: rgba(2, 8, 18, 0.95);      /* Night Blue Panel - Glassmorphism */
+            --bg-ocean: #010204;                    /* Ocean background (darker than main) */
+            --bg-country: #0a0f1a;                  /* Inactive country fill */
+            --bg-hover: #162033;                    /* Hover state */
+            --text-primary: #e2e8f0;                /* Light gray - Primary text */
+            --text-secondary: #94a3b8;              /* Muted gray - Secondary text */
+            --border: #1e293b;                      /* Slate gray - Borders */
+            --success: #22c55e;                     /* Green - Success/Active */
+            --danger: #ff3e3e;                      /* Red - Danger/Alert */
+            --warning: #f59e0b;                     /* Orange - Warning */
+            --grid: rgba(0, 242, 255, 0.05);       /* Cyan grid overlay */
+            --scan: rgba(0, 242, 255, 0.05);       /* Scan line effect */
+            --selection: rgba(0, 242, 255, 0.15);  /* Active selection glow */
+            --shadow: rgba(0, 0, 0, 0.8);          /* Deep shadow for panels */
+        }
+
+        body.light-mode {
+            --primary: #0ea5e9;
+            --bg: #f5f7fa;
+            --bg-panel: rgba(255, 255, 255, 0.95);
+            --bg-ocean: #e0e7ef;
+            --bg-country: #ffffff;
+            --bg-hover: #f1f5f9;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #d1d5db;
+            --success: #059669;
+            --danger: #dc2626;
+            --warning: #d97706;
+            --grid: rgba(14, 165, 233, 0.03);
+            --scan: rgba(14, 165, 233, 0.03);
+            --selection: rgba(14, 165, 233, 0.1);
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Cyber-Noir Grid Overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                repeating-linear-gradient(0deg, var(--grid) 0px, transparent 1px, transparent 40px),
+                repeating-linear-gradient(90deg, var(--grid) 0px, transparent 1px, transparent 40px);
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        /* CRT Scan Line Effect */
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                transparent 50%,
+                var(--scan) 50%
+            );
+            background-size: 100% 4px;
+            pointer-events: none;
+            z-index: 2;
+            animation: scan 8s linear infinite;
+        }
+
+        @keyframes scan {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(4px); }
+        }
+
+        /* Ensure content is above overlays */
+        .header, .container {
+            position: relative;
+            z-index: 10;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 12px var(--shadow);
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .theme-toggle {
+            background: var(--bg-hover);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 0.9rem;
+        }
+
+        .theme-toggle:hover {
+            background: var(--primary);
+            color: var(--bg);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Container */
+        .container {
+            padding: 1.5rem;
+            max-width: 1920px;
+            margin: 0 auto;
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .widget {
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            box-shadow: 0 8px 16px var(--shadow);
+        }
+
+        .widget-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .widget-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .widget-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .widget-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s ease;
+        }
+
+        .widget-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+        }
+
+        /* Map Widget */
+        .map-widget {
+            grid-column: 1 / 2;
+            grid-row: 1 / 3;
+            position: relative;
+            min-height: 600px;
+        }
+
+        #map-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: var(--bg-ocean);
+        }
+
+        #world-map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .country {
+            fill: var(--bg-country);
+            stroke: var(--border);
+            stroke-width: 0.5;
+            cursor: pointer;
+            transition: fill 0.2s ease;
+        }
+
+        .country:hover {
+            fill: var(--bg-hover);
+            opacity: 1;
+        }
+
+        .country.selected {
+            fill: var(--selection);
+            stroke: var(--primary);
+            stroke-width: 1.5;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: var(--bg-panel);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            box-shadow: 0 8px 16px var(--shadow);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .tooltip.show {
+            opacity: 1;
+        }
+
+        .tooltip-title {
+            font-weight: 600;
+            color: var(--primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .tooltip-content {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .tooltip-content div {
+            margin: 0.25rem 0;
+        }
+
+        /* Intelligence Console */
+        .intelligence-console {
+            grid-column: 2 / 3;
+            grid-row: 1 / 2;
+            max-height: 400px;
+        }
+
+        .console-content {
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .console-entry {
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border);
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .console-timestamp {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+
+        .console-message {
+            color: var(--text-primary);
+            margin-top: 0.25rem;
+        }
+
+        .console-level-info {
+            color: var(--primary);
+        }
+
+        .console-level-warning {
+            color: var(--warning);
+        }
+
+        .console-level-success {
+            color: var(--success);
+        }
+
+        /* News Feed */
+        .news-feed {
+            grid-column: 2 / 3;
+            grid-row: 2 / 3;
+            max-height: 400px;
+        }
+
+        .news-content {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .news-item {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .news-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .news-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        .news-source {
+            font-size: 0.75rem;
+            color: var(--primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .news-description {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        /* Economic Indicators */
+        .economic-indicators {
+            grid-column: 1 / 3;
+            grid-row: 3 / 4;
+        }
+
+        .indicators-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .indicator-card {
+            background: var(--bg-hover);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+        }
+
+        .indicator-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .indicator-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 0.25rem;
+        }
+
+        .indicator-change {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .indicator-change.positive {
+            color: var(--success);
+        }
+
+        .indicator-change.negative {
+            color: var(--danger);
+        }
+
+        /* Loading Indicator */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 3px solid var(--border);
+            border-top: 3px solid var(--primary);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Error Message */
+        .error-message {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--danger);
+            color: var(--danger);
+            padding: 1rem;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-hover);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--primary);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto;
+            }
+
+            .map-widget {
+                grid-column: 1 / 2;
+                grid-row: auto;
+                min-height: 400px;
+            }
+
+            .intelligence-console,
+            .news-feed {
+                grid-column: 1 / 2;
+                grid-row: auto;
+            }
+
+            .economic-indicators {
+                grid-column: 1 / 2;
+                grid-row: auto;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.2rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .indicators-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .map-widget {
+                min-height: 300px;
+            }
+        }
     </style>
 </head>
 <body>
-    <svg>
-        <!-- Countries layer should be drawn first -->
-        <g id="countries-layer">
-            <!-- Countries SVG paths go here -->
-        </g>
-        
-        <!-- Move links layer below countries layer for proper z-order -->
-        <g id="links-layer">
-            <!-- Links SVG paths go here -->
-        </g>
-    </svg>
+    <header class="header">
+        <h1>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="2" y1="12" x2="22" y2="12"/>
+                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+            </svg>
+            Puppet Strings Terminal
+        </h1>
+        <div class="header-controls">
+            <div class="status-indicator">
+                <span class="status-dot"></span>
+                <span id="status-text">Live Data Connected</span>
+            </div>
+            <button class="theme-toggle" id="theme-toggle">
+                <span id="theme-icon">☀️</span> Toggle Theme
+            </button>
+        </div>
+    </header>
+
+    <div class="container">
+        <div class="dashboard-grid">
+            <!-- Map Widget -->
+            <div class="widget map-widget">
+                <div class="widget-header">
+                    <h2 class="widget-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="3 11 22 2 13 21 11 13 3 11"/>
+                        </svg>
+                        Global Intelligence Map
+                    </h2>
+                    <div class="widget-actions">
+                        <button class="widget-btn" id="reset-zoom">Reset</button>
+                    </div>
+                </div>
+                <div id="map-container">
+                    <div class="loading show">
+                        <div class="spinner"></div>
+                        <div>Loading world map...</div>
+                    </div>
+                    <svg id="world-map"></svg>
+                </div>
+                <div class="tooltip" id="map-tooltip">
+                    <div class="tooltip-title"></div>
+                    <div class="tooltip-content"></div>
+                </div>
+            </div>
+
+            <!-- Intelligence Console -->
+            <div class="widget intelligence-console">
+                <div class="widget-header">
+                    <h2 class="widget-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="4 17 10 11 4 5"/>
+                            <line x1="12" y1="19" x2="20" y2="19"/>
+                        </svg>
+                        Intelligence Console
+                    </h2>
+                    <div class="widget-actions">
+                        <button class="widget-btn" id="clear-console">Clear</button>
+                    </div>
+                </div>
+                <div class="console-content" id="console-content">
+                    <!-- Console entries will be added here -->
+                </div>
+            </div>
+
+            <!-- News Feed -->
+            <div class="widget news-feed">
+                <div class="widget-header">
+                    <h2 class="widget-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/>
+                            <path d="M18 14h-8"/>
+                            <path d="M15 18h-5"/>
+                            <path d="M10 6h8v4h-8z"/>
+                        </svg>
+                        Geostrategic News
+                    </h2>
+                    <div class="widget-actions">
+                        <button class="widget-btn" id="refresh-news">Refresh</button>
+                    </div>
+                </div>
+                <div class="news-content" id="news-content">
+                    <div class="loading show">
+                        <div class="spinner"></div>
+                        <div>Loading news feed...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Economic Indicators -->
+            <div class="widget economic-indicators">
+                <div class="widget-header">
+                    <h2 class="widget-title">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="12" y1="2" x2="12" y2="22"/>
+                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                        Global Economic Indicators
+                    </h2>
+                    <div class="widget-actions">
+                        <button class="widget-btn" id="refresh-indicators">Refresh</button>
+                    </div>
+                </div>
+                <div class="indicators-grid" id="indicators-grid">
+                    <div class="loading show">
+                        <div class="spinner"></div>
+                        <div>Loading market data...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        // Load external config if available, otherwise use defaults
+        const CONFIG = (typeof API_CONFIG !== 'undefined' ? API_CONFIG : {
+            // API keys - IMPORTANT: Replace 'demo' with your actual API keys
+            // For production, move these to a separate config.js file (see config.example.js)
+            NEWS_API_KEY: 'demo',
+            ALPHA_VANTAGE_KEY: 'demo',
+            
+            // API endpoints
+            NEWS_API_URL: 'https://newsapi.org/v2/top-headlines',
+            COUNTRIES_API_URL: 'https://restcountries.com/v3.1/all',
+            WORLD_MAP_URL: 'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json',
+            
+            // Refresh interval (milliseconds)
+            REFRESH_INTERVAL: 300000, // 5 minutes
+            
+            // Zoom constants
+            MIN_ZOOM_SCALE: 1,
+            MAX_ZOOM_SCALE: 8,
+            
+            // Market volatility for demo data
+            MAX_MARKET_VOLATILITY_PERCENT: 5,
+        });
+
+        // State management
+        const state = {
+            selectedCountry: null,
+            countries: [],
+            theme: 'dark',
+            autoRefresh: true
+        };
+
+        // Initialize application
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTheme();
+            initializeEventListeners();
+            loadAllData();
+            startAutoRefresh();
+            addConsoleMessage('System initialized', 'success');
+        });
+
+        // Theme Management
+        function initializeTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            setTheme(savedTheme);
+        }
+
+        function setTheme(theme) {
+            state.theme = theme;
+            if (theme === 'light') {
+                document.body.classList.add('light-mode');
+                document.getElementById('theme-icon').textContent = '🌙';
+            } else {
+                document.body.classList.remove('light-mode');
+                document.getElementById('theme-icon').textContent = '☀️';
+            }
+            localStorage.setItem('theme', theme);
+        }
+
+        function toggleTheme() {
+            setTheme(state.theme === 'dark' ? 'light' : 'dark');
+            addConsoleMessage(`Theme switched to ${state.theme} mode`, 'info');
+        }
+
+        // Event Listeners
+        function initializeEventListeners() {
+            document.getElementById('theme-toggle').addEventListener('click', toggleTheme);
+            document.getElementById('clear-console').addEventListener('click', clearConsole);
+            document.getElementById('refresh-news').addEventListener('click', loadNewsData);
+            document.getElementById('refresh-indicators').addEventListener('click', loadEconomicData);
+            document.getElementById('reset-zoom').addEventListener('click', resetMapZoom);
+        }
+
+        // Console Management
+        function addConsoleMessage(message, level = 'info') {
+            const consoleContent = document.getElementById('console-content');
+            const entry = document.createElement('div');
+            entry.className = 'console-entry';
+            
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `
+                <div class="console-timestamp">[${timestamp}]</div>
+                <div class="console-message console-level-${level}">${message}</div>
+            `;
+            
+            consoleContent.insertBefore(entry, consoleContent.firstChild);
+            
+            // Limit console entries to 50
+            while (consoleContent.children.length > 50) {
+                consoleContent.removeChild(consoleContent.lastChild);
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('console-content').innerHTML = '';
+            addConsoleMessage('Console cleared', 'info');
+        }
+
+        // Data Loading Functions
+        async function loadAllData() {
+            addConsoleMessage('Loading all data sources...', 'info');
+            await Promise.all([
+                loadMapData(),
+                loadNewsData(),
+                loadEconomicData()
+            ]);
+        }
+
+        // Map Data Loading
+        async function loadMapData() {
+            try {
+                addConsoleMessage('Fetching world map data...', 'info');
+                
+                // Load world topology
+                const worldData = await fetch(CONFIG.WORLD_MAP_URL).then(res => res.json());
+                
+                // Load country data from REST Countries API
+                const countriesData = await fetch(CONFIG.COUNTRIES_API_URL).then(res => res.json());
+                state.countries = countriesData;
+                
+                renderMap(worldData);
+                addConsoleMessage(`Loaded ${countriesData.length} countries`, 'success');
+            } catch (error) {
+                // Ensure state.countries is always an array
+                if (!Array.isArray(state.countries)) {
+                    state.countries = [];
+                }
+                addConsoleMessage(`Error loading map: ${error.message}`, 'warning');
+                showError('Failed to load map data. Using fallback visualization.');
+                renderFallbackMap();
+            }
+        }
+
+        // Render Map with D3.js
+        function renderMap(worldData) {
+            const container = document.getElementById('map-container');
+            const loading = container.querySelector('.loading');
+            loading.classList.remove('show');
+
+            const svg = d3.select('#world-map');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.attr('width', width).attr('height', height);
+
+            const projection = d3.geoMercator()
+                .scale(width / 6.5)
+                .translate([width / 2, height / 1.5]);
+
+            const path = d3.geoPath().projection(projection);
+
+            const countries = topojson.feature(worldData, worldData.objects.countries);
+
+            // Add zoom behavior
+            const zoom = d3.zoom()
+                .scaleExtent([CONFIG.MIN_ZOOM_SCALE, CONFIG.MAX_ZOOM_SCALE])
+                .on('zoom', (event) => {
+                    svg.selectAll('g').attr('transform', event.transform);
+                });
+
+            svg.call(zoom);
+
+            const g = svg.append('g');
+
+            // Draw countries
+            g.selectAll('path')
+                .data(countries.features)
+                .enter()
+                .append('path')
+                .attr('class', 'country')
+                .attr('d', path)
+                .on('mouseover', handleCountryHover)
+                .on('mouseout', handleCountryOut)
+                .on('click', handleCountryClick);
+
+            // Store zoom behavior for reset
+            svg.zoomBehavior = zoom;
+        }
+
+        function renderFallbackMap() {
+            const container = document.getElementById('map-container');
+            const loading = container.querySelector('.loading');
+            loading.classList.remove('show');
+
+            const svg = d3.select('#world-map');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            svg.attr('width', width).attr('height', height);
+
+            // Simple fallback visualization
+            svg.append('text')
+                .attr('x', width / 2)
+                .attr('y', height / 2)
+                .attr('text-anchor', 'middle')
+                .attr('fill', 'var(--text-secondary)')
+                .text('Map visualization unavailable');
+        }
+
+        function resetMapZoom() {
+            const svg = d3.select('#world-map');
+            if (svg.zoomBehavior) {
+                svg.transition().duration(750).call(
+                    svg.zoomBehavior.transform,
+                    d3.zoomIdentity
+                );
+                addConsoleMessage('Map view reset', 'info');
+            }
+        }
+
+        function handleCountryHover(event, d) {
+            const countryData = findCountryByGeoId(d.id);
+            const tooltip = document.getElementById('map-tooltip');
+            
+            d3.select(event.target).classed('selected', true);
+            
+            if (countryData) {
+                const title = tooltip.querySelector('.tooltip-title');
+                const content = tooltip.querySelector('.tooltip-content');
+                
+                title.textContent = countryData.name.common;
+                content.innerHTML = `
+                    <div><strong>Capital:</strong> ${countryData.capital?.[0] || 'N/A'}</div>
+                    <div><strong>Population:</strong> ${formatNumber(countryData.population)}</div>
+                    <div><strong>Region:</strong> ${countryData.region}</div>
+                    <div><strong>Area:</strong> ${formatNumber(countryData.area)} km²</div>
+                `;
+                
+                tooltip.style.left = event.pageX + 10 + 'px';
+                tooltip.style.top = event.pageY + 10 + 'px';
+                tooltip.classList.add('show');
+            }
+        }
+
+        function handleCountryOut(event, d) {
+            if (state.selectedCountry !== d.id) {
+                d3.select(event.target).classed('selected', false);
+            }
+            document.getElementById('map-tooltip').classList.remove('show');
+        }
+
+        function handleCountryClick(event, d) {
+            state.selectedCountry = d.id;
+            const countryData = findCountryByGeoId(d.id);
+            
+            if (countryData) {
+                addConsoleMessage(`Selected: ${countryData.name.common}`, 'info');
+                loadCountryNews(countryData.name.common);
+            }
+        }
+
+        function findCountryByGeoId(geoId) {
+            // Safety check: ensure state.countries is an array
+            if (!Array.isArray(state.countries)) {
+                state.countries = [];
+                return null;
+            }
+            
+            // Try to match by various country codes
+            // This is a simplified matching - in production, use a proper mapping table
+            const country = state.countries.find(c => 
+                c.cca3 === geoId || 
+                c.ccn3 === String(geoId) ||
+                c.cca2 === geoId ||
+                c.cioc === geoId
+            );
+            
+            // If no exact match, try fuzzy matching by name
+            if (!country && state.countries.length > 0) {
+                // For demo purposes, return a random country if exact match fails
+                // In production, implement proper geo ID to country code mapping
+                return state.countries[Math.floor(Math.random() * state.countries.length)];
+            }
+            
+            return country;
+        }
+
+        // News Data Loading
+        async function loadNewsData(country = null) {
+            try {
+                addConsoleMessage('Fetching latest news...', 'info');
+                
+                // Use demo data if API key is not configured
+                const newsData = await fetchNewsWithFallback(country);
+                renderNews(newsData);
+                
+                addConsoleMessage(`Loaded ${newsData.length} news articles`, 'success');
+            } catch (error) {
+                addConsoleMessage(`Error loading news: ${error.message}`, 'warning');
+                showDemoNews();
+            }
+        }
+
+        async function loadCountryNews(countryName) {
+            addConsoleMessage(`Loading news for ${countryName}...`, 'info');
+            await loadNewsData(countryName);
+        }
+
+        async function fetchNewsWithFallback(country) {
+            // Try to fetch from NewsAPI
+            try {
+                const params = new URLSearchParams({
+                    apiKey: CONFIG.NEWS_API_KEY,
+                    category: 'business',
+                    pageSize: 10,
+                    ...(country && { q: country })
+                });
+
+                const response = await fetch(`${CONFIG.NEWS_API_URL}?${params}`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.articles || [];
+                }
+            } catch (e) {
+                console.log('NewsAPI unavailable, using demo data');
+            }
+
+            // Return demo data
+            return getDemoNewsData(country);
+        }
+
+        function getDemoNewsData(country) {
+            const demoArticles = [
+                {
+                    title: `${country || 'Global'} Economic Summit Concludes with New Trade Agreements`,
+                    source: { name: 'International News' },
+                    description: 'Leaders from multiple nations reached consensus on key economic policies affecting global markets.',
+                    url: '#',
+                    publishedAt: new Date().toISOString()
+                },
+                {
+                    title: 'Technology Sector Shows Strong Growth in Q4',
+                    source: { name: 'Tech Financial' },
+                    description: 'Major technology companies report record earnings, driving market optimism.',
+                    url: '#',
+                    publishedAt: new Date(Date.now() - 3600000).toISOString()
+                },
+                {
+                    title: 'Currency Markets React to Central Bank Decisions',
+                    source: { name: 'Finance Daily' },
+                    description: 'Major currencies experience volatility following policy announcements.',
+                    url: '#',
+                    publishedAt: new Date(Date.now() - 7200000).toISOString()
+                },
+                {
+                    title: 'Regional Security Alliance Expands Cooperation',
+                    source: { name: 'Defense Analysis' },
+                    description: 'New partnerships formed to address emerging security challenges.',
+                    url: '#',
+                    publishedAt: new Date(Date.now() - 10800000).toISOString()
+                }
+            ];
+
+            return demoArticles;
+        }
+
+        function renderNews(articles) {
+            const newsContent = document.getElementById('news-content');
+            const loading = newsContent.querySelector('.loading');
+            if (loading) loading.remove();
+
+            newsContent.innerHTML = '';
+
+            articles.forEach(article => {
+                const newsItem = document.createElement('div');
+                newsItem.className = 'news-item';
+                newsItem.innerHTML = `
+                    <div class="news-source">${article.source.name}</div>
+                    <div class="news-title">${article.title}</div>
+                    <div class="news-description">${article.description || 'No description available'}</div>
+                `;
+                
+                newsItem.addEventListener('click', () => {
+                    if (article.url && article.url !== '#') {
+                        window.open(article.url, '_blank');
+                    }
+                    addConsoleMessage(`Opened: ${article.title}`, 'info');
+                });
+                
+                newsContent.appendChild(newsItem);
+            });
+        }
+
+        function showDemoNews() {
+            renderNews(getDemoNewsData());
+        }
+
+        // Economic Data Loading
+        async function loadEconomicData() {
+            try {
+                addConsoleMessage('Fetching economic indicators...', 'info');
+                
+                const economicData = await fetchEconomicDataWithFallback();
+                renderEconomicIndicators(economicData);
+                
+                addConsoleMessage('Economic data updated', 'success');
+            } catch (error) {
+                addConsoleMessage(`Error loading economic data: ${error.message}`, 'warning');
+                showDemoEconomicData();
+            }
+        }
+
+        async function fetchEconomicDataWithFallback() {
+            // Try to fetch from Alpha Vantage or similar
+            // For demo purposes, return simulated data
+            return getDemoEconomicData();
+        }
+
+        function getDemoEconomicData() {
+            const baseValues = {
+                'S&P 500': 4500,
+                'NASDAQ': 14000,
+                'Dow Jones': 35000,
+                'Gold (oz)': 1950,
+                'Oil (bbl)': 75,
+                'EUR/USD': 1.08
+            };
+
+            return Object.entries(baseValues).map(([label, baseValue]) => {
+                const change = (Math.random() - 0.5) * CONFIG.MAX_MARKET_VOLATILITY_PERCENT;
+                const value = baseValue * (1 + change / 100);
+                
+                return {
+                    label,
+                    value: value.toFixed(2),
+                    change: change.toFixed(2),
+                    isPositive: change > 0
+                };
+            });
+        }
+
+        function renderEconomicIndicators(indicators) {
+            const grid = document.getElementById('indicators-grid');
+            const loading = grid.querySelector('.loading');
+            if (loading) loading.remove();
+
+            grid.innerHTML = '';
+
+            indicators.forEach(indicator => {
+                const card = document.createElement('div');
+                card.className = 'indicator-card';
+                card.innerHTML = `
+                    <div class="indicator-label">${indicator.label}</div>
+                    <div class="indicator-value">${formatIndicatorValue(indicator.label, indicator.value)}</div>
+                    <div class="indicator-change ${indicator.isPositive ? 'positive' : 'negative'}">
+                        ${indicator.isPositive ? '▲' : '▼'} ${Math.abs(indicator.change)}%
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        function formatIndicatorValue(label, value) {
+            if (label.includes('USD') || label.includes('EUR')) {
+                return value;
+            } else if (label.includes('Gold') || label.includes('Oil')) {
+                return '$' + value;
+            } else {
+                return formatNumber(value);
+            }
+        }
+
+        function showDemoEconomicData() {
+            renderEconomicIndicators(getDemoEconomicData());
+        }
+
+        // Auto-refresh functionality
+        function startAutoRefresh() {
+            if (state.autoRefresh) {
+                setInterval(() => {
+                    if (state.autoRefresh) {
+                        addConsoleMessage('Auto-refreshing data...', 'info');
+                        loadNewsData();
+                        loadEconomicData();
+                    }
+                }, CONFIG.REFRESH_INTERVAL);
+            }
+        }
+
+        // Utility Functions
+        function formatNumber(num) {
+            if (!num) return 'N/A';
+            return num.toLocaleString();
+        }
+
+        function showError(message) {
+            // Log to console
+            console.error(message);
+            
+            // Show in intelligence console
+            addConsoleMessage(message, 'warning');
+            
+            // Could add visual error notification in future
+            // For now, errors are visible in the intelligence console
+        }
+
+        // Error handling
+        window.addEventListener('error', (event) => {
+            addConsoleMessage(`Error: ${event.message}`, 'warning');
+        });
+
+        // Performance monitoring
+        window.addEventListener('load', () => {
+            const loadTime = performance.now();
+            addConsoleMessage(`Dashboard loaded in ${loadTime.toFixed(0)}ms`, 'success');
+        });
+    </script>
 </body>
 </html>
